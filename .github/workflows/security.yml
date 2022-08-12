@@ -1,0 +1,27 @@
+#Version : 0.1
+
+name: Security Pipeline
+
+on: 
+  push:
+    branches: [ main, homolog ]
+  pull_request:
+    branches: [ main, homolog ]
+ 
+# Horus Job
+jobs:
+  Horus:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Running Horus Security
+      continue-on-error: true
+      env:
+        HORUSEC_CLI_REPOSITORY_AUTHORIZATION: ${{ secrets.HORUSEC_CLI_REPOSITORY_AUTHORIZATION }}
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
+        horusec start -p ./ -a "$HORUSEC_CLI_REPOSITORY_AUTHORIZATION" -G "true" -u "https://api-horusec.zup.com.br" -n "${GITHUB_REPOSITORY}"
+
+
+       

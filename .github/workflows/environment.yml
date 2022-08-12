@@ -1,0 +1,87 @@
+name: Name of service #MUST BE CHANGED
+
+on:
+  push:
+    branches: [develop]
+
+env:
+  AWS_REGION: sa-east-1
+  AWS_ACCOUNT_ID: 000000000000 #MUST BE CHANGED
+  TAG_IMAGE: ${{ github.sha }}
+  ECR_REGISTRY: 000000000000.dkr.ecr.sa-east-1.amazonaws.com #MUST BE CHANGED
+  ECR_REPOSITORY_NAME: bella-fm/REPOSITORY_NAME_CHANGE #MUST BE CHANGED
+  JAVA_VERSION: 17
+  JAVA_DISTRIBUTION: temurin
+
+jobs:
+  change-detection:
+    name: Change detection
+    runs-on: dev
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            app:
+              - 'infra/deploy/**'
+              - 'service-name-*/**'
+              - '.github/workflows/**' 
+
+  build-and-push-docker-images:
+    name: Build and push docker images
+    needs: [change-detection]
+    if: ${{ needs.change-detection.outputs.app == 'true' }}
+    runs-on: dev
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v3
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Cache local maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Build project with maven
+        run: ./mvnw -B package -Pcloud
+      - name: AWS login ecr
+        run: aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+      - name: Build service-name-api container image
+        run: |
+          docker build -t service-name-api service-name-api /
+            docker tag service-name-api:latest $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$TAG_IMAGE
+      - name: Pushing service-name-api:${{ env.TAG_IMAGE }} to ECR
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_NAME:$TAG_IMAGE
+
+  deploy-eks-services:
+    name: Deploy eks services
+    needs: [build-and-push-docker-images, change-detection]
+    if: ${{ needs.change-detection.outputs.app == 'true' }}
+    runs-on: dev
+    env:
+      SAMPLE_VAR: ${{ secrets.SAMPLE_VAR }} #MUST BE CHANGED BASED ON THE VALUE STORED IN GITHUB ACTIONS SECRETS
+    steps:
+      - name: Connect to EKS environment AWS
+        run: |
+          aws eks --region $AWS_REGION update-kubeconfig --name CLUSTER_NAME_MUST_BE_CHANGED
+      - name: Deploy api on EKS
+        env:
+          ENV: ".dev."
+        uses: swdotcom/update-and-apply-kubernetes-configs@v1
+        with:
+          k8-config-file-paths: |
+            $GITHUB_WORKSPACE/infra/deploy/api.yml
+          replacement-method: defined
+      - name: Verifing deployment
+        run: |
+          kubectl rollout status deployment/service-name-api -n CLUSTER_NAME_MUST_BE_CHANGED
