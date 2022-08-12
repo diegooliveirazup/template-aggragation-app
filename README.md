@@ -1,4 +1,4 @@
-# Repository to be used as a template that delivery a standard pipeline/infrastructure elements
+# Repository created to be used as a template that delivers a standard pipeline/infrastructure elements
 
 ## What is covered:
 
