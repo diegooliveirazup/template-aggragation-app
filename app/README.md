@@ -1,1 +1,1 @@
-## Business documentation, like business flow, steps to local running, etc.
+## Business and technical documentation, such as business flow, steps to local execution, etc.
